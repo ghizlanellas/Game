@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>ORBIT // Rainbow Reflex</title>
+  <title>PULSE // Neon Dodge</title>
   <style>
     * {
       box-sizing: border-box;
@@ -17,10 +17,9 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: #0b0d14;
+      background-color: #07090f;
       color: #f8fafc;
-      transition: background-color 0.45s ease, color 0.45s ease;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
 
     canvas {
@@ -46,7 +45,6 @@
     .stat-group {
       display: flex;
       gap: 28px;
-      align-items: baseline;
     }
 
     .stat {
@@ -59,25 +57,19 @@
       font-weight: 700;
       letter-spacing: 0.14em;
       text-transform: uppercase;
-      opacity: 0.55;
+      opacity: 0.5;
     }
 
     .stat-value {
       font-size: 26px;
       font-weight: 800;
       font-variant-numeric: tabular-nums;
-      letter-spacing: -0.02em;
-    }
-
-    .controls {
-      pointer-events: auto;
-      display: flex;
-      gap: 12px;
     }
 
     button.icon-btn {
+      pointer-events: auto;
       background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.14);
+      border: 1px solid rgba(255, 255, 255, 0.15);
       color: inherit;
       padding: 8px 14px;
       border-radius: 999px;
@@ -95,36 +87,18 @@
       transform: translateY(-1px);
     }
 
-    button.icon-btn:active {
-      transform: scale(0.96);
-    }
-
     .hint {
       position: fixed;
-      bottom: 28px;
+      bottom: 26px;
       left: 50%;
       transform: translateX(-50%);
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
-      letter-spacing: 0.12em;
+      letter-spacing: 0.14em;
       text-transform: uppercase;
-      opacity: 0.55;
+      opacity: 0.5;
       pointer-events: none;
-      text-align: center;
       white-space: nowrap;
-    }
-
-    @media (max-width: 600px) {
-      .hud {
-        padding: 18px 20px;
-      }
-      .stat-value {
-        font-size: 22px;
-      }
-      .hint {
-        font-size: 11px;
-        bottom: 20px;
-      }
     }
   </style>
 </head>
@@ -132,373 +106,290 @@
   <div class="hud">
     <div class="stat-group">
       <div class="stat">
-        <span class="stat-label">Best</span>
-        <span class="stat-value" id="bestScore">0</span>
+        <span class="stat-label">Score</span>
+        <span class="stat-value" id="scoreEl">0</span>
       </div>
       <div class="stat">
-        <span class="stat-label">Speed</span>
-        <span class="stat-value" id="speedDisplay">1.0x</span>
+        <span class="stat-label">Best</span>
+        <span class="stat-value" id="bestEl">0</span>
       </div>
     </div>
-    <div class="controls">
-      <button class="icon-btn" id="soundToggle" aria-label="Toggle Sound">Sound: On</button>
-    </div>
+    <button class="icon-btn" id="soundBtn">Sound: On</button>
   </div>
 
-  <div class="hint" id="hintText">Press Space or Tap when the dot enters the arc</div>
-
-  <canvas id="gameCanvas"></canvas>
+  <div class="hint" id="hintEl">Hold Space or Click & Hold to rise</div>
+  <canvas id="canvas"></canvas>
 
   <script>
-    const canvas = document.getElementById("gameCanvas");
+    const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");
-    const bestScoreEl = document.getElementById("bestScore");
-    const speedDisplayEl = document.getElementById("speedDisplay");
-    const soundToggleBtn = document.getElementById("soundToggle");
-    const hintTextEl = document.getElementById("hintText");
+    const scoreEl = document.getElementById("scoreEl");
+    const bestEl = document.getElementById("bestEl");
+    const soundBtn = document.getElementById("soundBtn");
+    const hintEl = document.getElementById("hintEl");
 
-    // Dark themes so the rainbow lines pop vividly
-    const THEMES = [
-      { bg: "#0b0d14", track: "rgba(255,255,255,0.12)", text: "#f8fafc" },
-      { bg: "#100c1c", track: "rgba(255,255,255,0.12)", text: "#f5f3ff" },
-      { bg: "#091518", track: "rgba(255,255,255,0.12)", text: "#ecfeff" },
-      { bg: "#140e12", track: "rgba(255,255,255,0.12)", text: "#fff1f2" },
-      { bg: "#0c131d", track: "rgba(255,255,255,0.12)", text: "#f0f9ff" }
-    ];
-
-    let currentThemeIndex = 0;
-    let rainbowHue = 0;
-
-    // Web Audio API Synthesizer
+    // Web Audio Synthesizer
     let audioCtx = null;
-    let soundEnabled = true;
+    let soundOn = true;
 
     function initAudio() {
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      if (audioCtx.state === "suspended") {
-        audioCtx.resume();
-      }
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume();
     }
 
-    const PENTATONIC = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33, 659.25, 783.99, 880.00];
-
-    function playHitSound(score, isPerfect) {
-      if (!soundEnabled) return;
+    function playTone(freq, type, duration, vol = 0.15) {
+      if (!soundOn) return;
       initAudio();
-
       const now = audioCtx.currentTime;
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
-
-      const noteFreq = PENTATONIC[score % PENTATONIC.length] * (isPerfect ? 1.5 : 1);
-      osc.type = isPerfect ? "triangle" : "sine";
-      osc.frequency.setValueAtTime(noteFreq, now);
-      osc.frequency.exponentialRampToValueAtTime(noteFreq * 1.02, now + 0.18);
-
-      gain.gain.setValueAtTime(0.001, now);
-      gain.gain.linearRampToValueAtTime(isPerfect ? 0.24 : 0.18, now + 0.015);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
-
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, now);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.15, now + duration);
+      gain.gain.setValueAtTime(vol, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
       osc.connect(gain);
       gain.connect(audioCtx.destination);
-
       osc.start(now);
-      osc.stop(now + 0.3);
+      osc.stop(now + duration);
     }
 
-    function playMissSound() {
-      if (!soundEnabled) return;
+    function playCrash() {
+      if (!soundOn) return;
       initAudio();
-
       const now = audioCtx.currentTime;
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
-
       osc.type = "sawtooth";
-      osc.frequency.setValueAtTime(140, now);
-      osc.frequency.exponentialRampToValueAtTime(52, now + 0.35);
-
-      const filter = audioCtx.createBiquadFilter();
-      filter.type = "lowpass";
-      filter.frequency.setValueAtTime(320, now);
-
-      gain.gain.setValueAtTime(0.22, now);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
-
-      osc.connect(filter);
-      filter.connect(gain);
+      osc.frequency.setValueAtTime(160, now);
+      osc.frequency.exponentialRampToValueAtTime(38, now + 0.4);
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
+      osc.connect(gain);
       gain.connect(audioCtx.destination);
-
       osc.start(now);
-      osc.stop(now + 0.4);
+      osc.stop(now + 0.45);
     }
 
-    soundToggleBtn.addEventListener("click", (e) => {
+    soundBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      soundEnabled = !soundEnabled;
-      soundToggleBtn.textContent = `Sound: ${soundEnabled ? "On" : "Off"}`;
-      if (soundEnabled) initAudio();
+      soundOn = !soundOn;
+      soundBtn.textContent = `Sound: ${soundOn ? "On" : "Off"}`;
+      if (soundOn) initAudio();
     });
 
-    // Game State
-    const STATE = {
-      START: "START",
-      PLAYING: "PLAYING",
-      GAMEOVER: "GAMEOVER"
-    };
-
-    let gameState = STATE.START;
-    let score = 0;
-    let bestScore = parseInt(localStorage.getItem("orbit_reflex_best") || "0", 10);
-    bestScoreEl.textContent = bestScore;
-
-    // Orbit & Target Parameters
-    const BASE_SPEED = 2.15;
-    let angularSpeed = BASE_SPEED;
-    let direction = 1;
-    let dotAngle = -Math.PI / 2;
-    let targetCenter = Math.PI / 2;
-    let targetArc = 0.68;
-
-    // Visual Effects
-    let particles = [];
-    let ripples = [];
-    let clickBeams = []; // Rainbow lines radiating from where you click/tap
-    let floatingTexts = [];
-    let shakeTime = 0;
-    let shakeIntensity = 0;
-    let ringPulse = 0;
-
-    // Responsive Sizing
-    let width = 0;
-    let height = 0;
-    let centerX = 0;
-    let centerY = 0;
-    let orbitRadius = 140;
-
+    // Resize handling
+    let W = 0, H = 0;
     function resize() {
       const dpr = window.devicePixelRatio || 1;
-      width = window.innerWidth;
-      height = window.innerHeight;
-      canvas.width = width * dpr;
-      canvas.height = height * dpr;
+      W = window.innerWidth;
+      H = window.innerHeight;
+      canvas.width = W * dpr;
+      canvas.height = H * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-      centerX = width / 2;
-      centerY = height / 2;
-      orbitRadius = Math.max(95, Math.min(width, height) * 0.27);
     }
-
     window.addEventListener("resize", resize);
     resize();
 
-    function normalizeAngle(a) {
-      return ((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    // Game variables
+    let state = "START"; // START, PLAY, OVER
+    let score = 0;
+    let best = parseInt(localStorage.getItem("pulse_dodge_best") || "0", 10);
+    bestEl.textContent = best;
+
+    let hue = 190;
+    let holding = false;
+    let shake = 0;
+
+    const player = {
+      x: 0,
+      y: 0,
+      vy: 0,
+      radius: 11,
+      trail: []
+    };
+
+    let gates = [];
+    let orbs = [];
+    let particles = [];
+    let gateTimer = 0;
+    let speed = 320;
+
+    function resetGame() {
+      score = 0;
+      scoreEl.textContent = "0";
+      speed = 320;
+      player.x = Math.min(180, W * 0.24);
+      player.y = H * 0.5;
+      player.vy = 0;
+      player.trail = [];
+      gates = [];
+      orbs = [];
+      particles = [];
+      gateTimer = 0.4;
+      state = "PLAY";
+      hintEl.textContent = "Hold Space or Click & Hold to rise";
+      playTone(440, "sine", 0.15);
     }
 
-    function shortestAngleDiff(a, b) {
-      let diff = normalizeAngle(a - b);
-      if (diff > Math.PI) diff -= Math.PI * 2;
-      return diff;
-    }
-
-    function applyTheme() {
-      const theme = THEMES[currentThemeIndex];
-      document.body.style.backgroundColor = theme.bg;
-      document.body.style.color = theme.text;
-    }
-
-    function spawnNewTarget() {
-      const minOffset = Math.PI * 0.55;
-      const maxOffset = Math.PI * 1.45;
-      const randomStep = minOffset + Math.random() * (maxOffset - minOffset);
-      targetCenter = normalizeAngle(dotAngle + direction * randomStep);
-      targetArc = Math.max(0.28, 0.68 - score * 0.011);
-    }
-
-    // Spawns rainbow rings, rainbow rays/lines, and particles at (x, y)
-    function spawnRainbowClickEffect(x, y, isHit, isPerfect) {
-      const baseHue = rainbowHue;
-
-      // 1. Multi-ring rainbow shockwave
-      const ringCount = isPerfect ? 4 : isHit ? 3 : 2;
-      for (let r = 0; r < ringCount; r++) {
-        ripples.push({
-          x,
-          y,
-          radius: 8 + r * 6,
-          maxRadius: (isPerfect ? 185 : isHit ? 140 : 95) - r * 14,
-          alpha: 0.95,
-          lineWidth: isPerfect ? 4.5 : 3.5,
-          hue: (baseHue + r * 55) % 360
-        });
-      }
-
-      // 2. Crisp rainbow lines/rays radiating outward from the click point
-      const lineCount = isPerfect ? 18 : isHit ? 14 : 10;
-      for (let i = 0; i < lineCount; i++) {
-        const angle = (Math.PI * 2 * i) / lineCount + (Math.random() - 0.5) * 0.15;
-        const speed = (isPerfect ? 260 : isHit ? 200 : 140) + Math.random() * 140;
-        const hue = (baseHue + (i * 360) / lineCount) % 360;
-        clickBeams.push({
-          x,
-          y,
-          angle,
-          dist: 10,
-          length: isPerfect ? 34 : isHit ? 24 : 16,
-          speed,
-          hue,
-          life: 1,
-          decay: 1.9 + Math.random() * 0.5
-        });
-      }
-
-      // 3. Glowing rainbow sparks
-      const sparkCount = isPerfect ? 26 : isHit ? 16 : 10;
-      for (let i = 0; i < sparkCount; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 70 + Math.random() * (isPerfect ? 280 : 190);
-        const hue = (baseHue + (i * 360) / sparkCount) % 360;
+    function spawnExplosion(x, y, colorHue, count = 20) {
+      for (let i = 0; i < count; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = 80 + Math.random() * 260;
         particles.push({
           x,
           y,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed,
-          radius: 2.5 + Math.random() * 3.5,
-          hue,
+          vx: Math.cos(ang) * spd,
+          vy: Math.sin(ang) * spd,
           life: 1,
-          decay: 1.5 + Math.random() * 0.8
+          decay: 1.6 + Math.random() * 0.8,
+          size: 2.5 + Math.random() * 3.5,
+          hue: (colorHue + (Math.random() - 0.5) * 60 + 360) % 360
         });
       }
     }
 
-    function spawnFloatingText(x, y, text, hue) {
-      floatingTexts.push({
-        x,
-        y,
-        text,
-        hue,
-        life: 1
+    function spawnGate() {
+      const gapHeight = Math.max(135, 220 - score * 2.2);
+      const margin = 80;
+      const gapY = margin + Math.random() * (H - margin * 2 - gapHeight);
+      const gateHue = (hue + 40) % 360;
+
+      gates.push({
+        x: W + 40,
+        width: 18,
+        gapY,
+        gapHeight,
+        passed: false,
+        hue: gateHue
       });
-    }
 
-    function startGame() {
-      score = 0;
-      angularSpeed = BASE_SPEED;
-      direction = 1;
-      dotAngle = -Math.PI / 2;
-      currentThemeIndex = 0;
-      applyTheme();
-      spawnNewTarget();
-      gameState = STATE.PLAYING;
-      speedDisplayEl.textContent = "1.0x";
-      hintTextEl.textContent = "Tap or press Space inside the rainbow arc";
-    }
-
-    function triggerAction(clickX, clickY) {
-      // Default to dot position if triggered via Spacebar
-      const dotX = centerX + Math.cos(dotAngle) * orbitRadius;
-      const dotY = centerY + Math.sin(dotAngle) * orbitRadius;
-      const effectX = typeof clickX === "number" ? clickX : dotX;
-      const effectY = typeof clickY === "number" ? clickY : dotY;
-
-      if (gameState === STATE.START || gameState === STATE.GAMEOVER) {
-        spawnRainbowClickEffect(effectX, effectY, true, false);
-        startGame();
-        playHitSound(0, false);
-        return;
-      }
-
-      const diff = Math.abs(shortestAngleDiff(dotAngle, targetCenter));
-      const hitTolerance = targetArc / 2 + 0.085;
-
-      if (diff <= hitTolerance) {
-        const isPerfect = diff <= targetArc * 0.18;
-        const pointsEarned = isPerfect ? 2 : 1;
-        score += pointsEarned;
-
-        if (score > bestScore) {
-          bestScore = score;
-          localStorage.setItem("orbit_reflex_best", bestScore);
-          bestScoreEl.textContent = bestScore;
-        }
-
-        direction *= -1;
-        angularSpeed = Math.min(5.8, BASE_SPEED + score * 0.115);
-        speedDisplayEl.textContent = `${(angularSpeed / BASE_SPEED).toFixed(1)}x`;
-
-        currentThemeIndex = (currentThemeIndex + 1) % THEMES.length;
-        applyTheme();
-
-        // Trigger rainbow lines both where you clicked AND at the dot
-        spawnRainbowClickEffect(effectX, effectY, true, isPerfect);
-        if (effectX !== dotX || effectY !== dotY) {
-          spawnRainbowClickEffect(dotX, dotY, true, isPerfect);
-        }
-
-        ringPulse = isPerfect ? 12 : 7;
-        shakeTime = isPerfect ? 0.16 : 0.08;
-        shakeIntensity = isPerfect ? 6 : 3;
-
-        if (isPerfect) {
-          spawnFloatingText(dotX, dotY - 22, "PERFECT +2", rainbowHue);
-        } else {
-          spawnFloatingText(dotX, dotY - 18, "+1", rainbowHue);
-        }
-
-        playHitSound(score, isPerfect);
-        spawnNewTarget();
-      } else {
-        gameState = STATE.GAMEOVER;
-        shakeTime = 0.35;
-        shakeIntensity = 11;
-        spawnRainbowClickEffect(effectX, effectY, false, false);
-        playMissSound();
-        hintTextEl.textContent = "Press Space or Tap anywhere to retry";
+      // 65% chance to spawn a bonus orb between gates
+      if (Math.random() < 0.65) {
+        orbs.push({
+          x: W + 210,
+          y: margin + Math.random() * (H - margin * 2),
+          radius: 9,
+          hue: (gateHue + 140) % 360,
+          pulse: 0
+        });
       }
     }
 
-    // Input Listeners
-    window.addEventListener("keydown", (e) => {
-      if (e.code === "Space" || e.key === " ") {
-        e.preventDefault();
-        if (!e.repeat) triggerAction();
+    // Input handlers
+    function onPressStart(e) {
+      if (e.type === "keydown" && e.code !== "Space") return;
+      if (e.type === "keydown") e.preventDefault();
+      holding = true;
+      if (state === "START" || state === "OVER") {
+        resetGame();
       }
-    });
+    }
 
-    canvas.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      triggerAction(e.clientX, e.clientY);
-    });
+    function onPressEnd(e) {
+      if (e.type === "keyup" && e.code !== "Space") return;
+      holding = false;
+    }
 
-    // Main Animation Loop
-    let lastTime = performance.now();
+    window.addEventListener("keydown", onPressStart);
+    window.addEventListener("keyup", onPressEnd);
+    canvas.addEventListener("pointerdown", onPressStart);
+    window.addEventListener("pointerup", onPressEnd);
 
+    // Main loop
+    let last = performance.now();
     function loop(now) {
-      const dt = Math.min(0.05, (now - lastTime) / 1000);
-      lastTime = now;
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
 
-      // Cycle global rainbow hue continuously
-      rainbowHue = (rainbowHue + dt * 140) % 360;
+      hue = (hue + dt * 35) % 360;
+      if (shake > 0) shake = Math.max(0, shake - dt * 35);
 
-      if (gameState === STATE.PLAYING) {
-        dotAngle = normalizeAngle(dotAngle + direction * angularSpeed * dt);
-      } else if (gameState === STATE.START) {
-        dotAngle = normalizeAngle(dotAngle + 1.2 * dt);
-      }
+      if (state === "START") {
+        player.x = Math.min(180, W * 0.24);
+        player.y = H * 0.5 + Math.sin(now * 0.004) * 28;
+        player.trail.push({ x: player.x, y: player.y, hue });
+        if (player.trail.length > 26) player.trail.shift();
+      } else if (state === "PLAY") {
+        // Physics: upward thrust when holding, gravity otherwise
+        const thrust = -1350;
+        const gravity = 1150;
+        player.vy += (holding ? thrust : gravity) * dt;
+        player.vy = Math.max(-520, Math.min(520, player.vy));
+        player.y += player.vy * dt;
 
-      if (shakeTime > 0) shakeTime = Math.max(0, shakeTime - dt);
-      if (ringPulse > 0) ringPulse = Math.max(0, ringPulse - dt * 38);
+        // Trail
+        player.trail.push({ x: player.x, y: player.y, hue });
+        if (player.trail.length > 28) player.trail.shift();
+        for (const t of player.trail) t.x -= speed * 0.45 * dt;
 
-      // Update rainbow beams/lines
-      for (let i = clickBeams.length - 1; i >= 0; i--) {
-        const b = clickBeams[i];
-        b.dist += b.speed * dt;
-        b.life -= b.decay * dt;
-        b.hue = (b.hue + 180 * dt) % 360;
-        if (b.life <= 0) clickBeams.splice(i, 1);
+        // Spawn gates
+        gateTimer -= dt;
+        if (gateTimer <= 0) {
+          spawnGate();
+          gateTimer = Math.max(1.05, 1.65 - score * 0.015);
+        }
+
+        // Update gates & check collisions
+        for (let i = gates.length - 1; i >= 0; i--) {
+          const g = gates[i];
+          g.x -= speed * dt;
+
+          // Score when passing gate
+          if (!g.passed && g.x + g.width < player.x) {
+            g.passed = true;
+            score += 1;
+            scoreEl.textContent = score;
+            speed = Math.min(640, 320 + score * 6);
+            hue = g.hue;
+            playTone(523.25 + (score % 8) * 45, "triangle", 0.14);
+            if (score > best) {
+              best = score;
+              bestEl.textContent = best;
+              localStorage.setItem("pulse_dodge_best", best);
+            }
+          }
+
+          // Collision check with top or bottom laser bar
+          const withinX = player.x + player.radius > g.x && player.x - player.radius < g.x + g.width;
+          const hitTop = player.y - player.radius < g.gapY;
+          const hitBottom = player.y + player.radius > g.gapY + g.gapHeight;
+
+          if (withinX && (hitTop || hitBottom)) {
+            triggerGameOver();
+          }
+
+          if (g.x + g.width < -50) gates.splice(i, 1);
+        }
+
+        // Update bonus orbs
+        for (let i = orbs.length - 1; i >= 0; i--) {
+          const o = orbs[i];
+          o.x -= speed * dt;
+          o.pulse += dt * 6;
+
+          const dist = Math.hypot(player.x - o.x, player.y - o.y);
+          if (dist < player.radius + o.radius + 4) {
+            score += 2;
+            scoreEl.textContent = score;
+            if (score > best) {
+              best = score;
+              bestEl.textContent = best;
+              localStorage.setItem("pulse_dodge_best", best);
+            }
+            spawnExplosion(o.x, o.y, o.hue, 16);
+            playTone(784, "sine", 0.2, 0.2);
+            orbs.splice(i, 1);
+            continue;
+          }
+
+          if (o.x < -40) orbs.splice(i, 1);
+        }
+
+        // Ceiling / Floor collision
+        if (player.y - player.radius < 0 || player.y + player.radius > H) {
+          triggerGameOver();
+        }
       }
 
       // Update particles
@@ -512,168 +403,145 @@
         if (p.life <= 0) particles.splice(i, 1);
       }
 
-      // Update ripples
-      for (let i = ripples.length - 1; i >= 0; i--) {
-        const r = ripples[i];
-        r.radius += (r.maxRadius - r.radius) * 8.5 * dt;
-        r.alpha -= 1.8 * dt;
-        r.hue = (r.hue + 150 * dt) % 360;
-        if (r.alpha <= 0) ripples.splice(i, 1);
-      }
-
-      // Update floating texts
-      for (let i = floatingTexts.length - 1; i >= 0; i--) {
-        const ft = floatingTexts[i];
-        ft.y -= 42 * dt;
-        ft.life -= 1.3 * dt;
-        if (ft.life <= 0) floatingTexts.splice(i, 1);
-      }
-
       draw();
       requestAnimationFrame(loop);
     }
 
+    function triggerGameOver() {
+      state = "OVER";
+      shake = 14;
+      spawnExplosion(player.x, player.y, hue, 36);
+      playCrash();
+      hintEl.textContent = "Click or press Space to play again";
+    }
+
     function draw() {
-      const theme = THEMES[currentThemeIndex];
-      ctx.clearRect(0, 0, width, height);
-
+      ctx.clearRect(0, 0, W, H);
       ctx.save();
-      if (shakeTime > 0) {
-        const dx = (Math.random() - 0.5) * shakeIntensity * 2;
-        const dy = (Math.random() - 0.5) * shakeIntensity * 2;
-        ctx.translate(dx, dy);
+
+      if (shake > 0) {
+        ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
       }
 
-      const activeRadius = orbitRadius + ringPulse;
-
-      // 1. Rainbow Shockwave Ripples
-      for (const r of ripples) {
+      // Subtle background grid
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.03)";
+      ctx.lineWidth = 1;
+      const gridSize = 48;
+      for (let x = 0; x < W; x += gridSize) {
         ctx.beginPath();
-        ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
-        ctx.strokeStyle = `hsla(${r.hue}, 100%, 62%, ${Math.max(0, r.alpha)})`;
-        ctx.lineWidth = r.lineWidth;
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, H);
+        ctx.stroke();
+      }
+      for (let y = 0; y < H; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(W, y);
         ctx.stroke();
       }
 
-      // 2. Rainbow Radiating Click Lines
-      for (const b of clickBeams) {
-        const x1 = b.x + Math.cos(b.angle) * b.dist;
-        const y1 = b.y + Math.sin(b.angle) * b.dist;
-        const x2 = b.x + Math.cos(b.angle) * (b.dist + b.length * b.life);
-        const y2 = b.y + Math.sin(b.angle) * (b.dist + b.length * b.life);
-
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.strokeStyle = `hsla(${b.hue}, 100%, 64%, ${Math.max(0, b.life)})`;
-        ctx.lineWidth = 3;
-        ctx.lineCap = "round";
-        ctx.stroke();
-      }
-
-      // 3. Base Orbit Track
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, activeRadius, 0, Math.PI * 2);
-      ctx.strokeStyle = theme.track;
-      ctx.lineWidth = 14;
-      ctx.stroke();
-
-      // 4. Target Zone Arc (Rainbow Gradient Glow)
-      if (gameState !== STATE.START) {
-        const startArc = targetCenter - targetArc / 2;
-        const endArc = targetCenter + targetArc / 2;
-
+      // Draw Laser Gates
+      for (const g of gates) {
         ctx.save();
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, activeRadius, startArc, endArc);
-        ctx.strokeStyle = `hsl(${rainbowHue}, 95%, 60%)`;
-        ctx.lineWidth = 16;
-        ctx.lineCap = "round";
-        ctx.shadowColor = `hsl(${rainbowHue}, 95%, 60%)`;
+        ctx.fillStyle = `hsl(${g.hue}, 95%, 60%)`;
+        ctx.shadowColor = `hsl(${g.hue}, 95%, 60%)`;
         ctx.shadowBlur = 18;
-        ctx.stroke();
+
+        // Top pillar
+        ctx.beginPath();
+        ctx.roundRect(g.x, -10, g.width, g.gapY + 10, 8);
+        ctx.fill();
+
+        // Bottom pillar
+        ctx.beginPath();
+        ctx.roundRect(g.x, g.gapY + g.gapHeight, g.width, H - (g.gapY + g.gapHeight) + 10, 8);
+        ctx.fill();
         ctx.restore();
       }
 
-      // 5. Center Score / Title Display
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = theme.text;
-
-      if (gameState === STATE.START) {
-        ctx.font = "800 36px -apple-system, BlinkMacSystemFont, sans-serif";
-        ctx.fillText("ORBIT", centerX, centerY - 12);
-        ctx.font = "600 13px -apple-system, BlinkMacSystemFont, sans-serif";
-        ctx.globalAlpha = 0.65;
-        ctx.fillText("TAP OR SPACE TO START", centerX, centerY + 22);
-        ctx.globalAlpha = 1;
-      } else if (gameState === STATE.PLAYING) {
-        ctx.font = "800 68px -apple-system, BlinkMacSystemFont, sans-serif";
-        ctx.fillText(score, centerX, centerY + 2);
-      } else if (gameState === STATE.GAMEOVER) {
-        ctx.font = "700 14px -apple-system, BlinkMacSystemFont, sans-serif";
-        ctx.fillStyle = "#ff4d6d";
-        ctx.fillText("MISSED", centerX, centerY - 36);
-
-        ctx.fillStyle = theme.text;
-        ctx.font = "800 58px -apple-system, BlinkMacSystemFont, sans-serif";
-        ctx.fillText(score, centerX, centerY + 6);
-
-        ctx.font = "600 12px -apple-system, BlinkMacSystemFont, sans-serif";
-        ctx.globalAlpha = 0.6;
-        ctx.fillText("TAP TO RETRY", centerX, centerY + 44);
-        ctx.globalAlpha = 1;
-      }
-
-      // 6. Rainbow Motion Trail behind the Dot
-      const trailLength = 12;
-      for (let t = trailLength; t > 0; t--) {
-        const trailAngle = dotAngle - direction * t * 0.045;
-        const tx = centerX + Math.cos(trailAngle) * activeRadius;
-        const ty = centerY + Math.sin(trailAngle) * activeRadius;
-        const trailHue = (rainbowHue - t * 22 + 360) % 360;
-        const alpha = (1 - t / trailLength) * 0.45;
+      // Draw Bonus Orbs
+      for (const o of orbs) {
+        const r = o.radius + Math.sin(o.pulse) * 2.5;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(o.x, o.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = `hsl(${o.hue}, 100%, 65%)`;
+        ctx.shadowColor = `hsl(${o.hue}, 100%, 65%)`;
+        ctx.shadowBlur = 16;
+        ctx.fill();
 
         ctx.beginPath();
-        ctx.arc(tx, ty, 10 * (1 - t / (trailLength * 1.4)), 0, Math.PI * 2);
-        ctx.fillStyle = `hsla(${trailHue}, 100%, 62%, ${alpha})`;
+        ctx.arc(o.x, o.y, r * 0.45, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
         ctx.fill();
+        ctx.restore();
       }
 
-      // 7. Orbiting Player Dot
-      const dotX = centerX + Math.cos(dotAngle) * activeRadius;
-      const dotY = centerY + Math.sin(dotAngle) * activeRadius;
+      // Draw Player Rainbow Ribbon Trail
+      if (player.trail.length > 1) {
+        for (let i = 1; i < player.trail.length; i++) {
+          const p0 = player.trail[i - 1];
+          const p1 = player.trail[i];
+          const ratio = i / player.trail.length;
+          ctx.beginPath();
+          ctx.moveTo(p0.x, p0.y);
+          ctx.lineTo(p1.x, p1.y);
+          ctx.strokeStyle = `hsla(${p1.hue}, 100%, 62%, ${ratio * 0.65})`;
+          ctx.lineWidth = player.radius * 1.6 * ratio;
+          ctx.lineCap = "round";
+          ctx.stroke();
+        }
+      }
 
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(dotX, dotY, 11, 0, Math.PI * 2);
-      ctx.fillStyle = "#ffffff";
-      ctx.shadowColor = `hsl(${rainbowHue}, 100%, 60%)`;
-      ctx.shadowBlur = 16;
-      ctx.fill();
-      ctx.restore();
+      // Draw Player Orb
+      if (state !== "OVER") {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.shadowColor = `hsl(${hue}, 100%, 60%)`;
+        ctx.shadowBlur = 20;
+        ctx.fill();
+        ctx.restore();
+      }
 
-      // 8. Rainbow Sparks
+      // Draw Particles
       for (const p of particles) {
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.radius * p.life, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
         ctx.fillStyle = `hsla(${p.hue}, 100%, 64%, ${Math.max(0, p.life)})`;
         ctx.fill();
       }
 
-      // 9. Floating Score Popups
-      for (const ft of floatingTexts) {
-        ctx.save();
-        ctx.font = "800 15px -apple-system, BlinkMacSystemFont, sans-serif";
-        ctx.fillStyle = `hsla(${ft.hue}, 100%, 68%, ${Math.max(0, ft.life)})`;
-        ctx.fillText(ft.text, ft.x, ft.y);
-        ctx.restore();
+      // Center Overlays for Start / Game Over
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      if (state === "START") {
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "800 42px -apple-system, BlinkMacSystemFont, sans-serif";
+        ctx.fillText("PULSE", W / 2, H / 2 - 18);
+        ctx.font = "600 13px -apple-system, BlinkMacSystemFont, sans-serif";
+        ctx.globalAlpha = 0.6;
+        ctx.fillText("HOLD SPACE OR CLICK TO FLY", W / 2, H / 2 + 18);
+        ctx.globalAlpha = 1;
+      } else if (state === "OVER") {
+        ctx.fillStyle = "#ff4d6d";
+        ctx.font = "700 14px -apple-system, BlinkMacSystemFont, sans-serif";
+        ctx.fillText("CRASHED", W / 2, H / 2 - 42);
+
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "800 60px -apple-system, BlinkMacSystemFont, sans-serif";
+        ctx.fillText(score, W / 2, H / 2 + 2);
+
+        ctx.font = "600 13px -apple-system, BlinkMacSystemFont, sans-serif";
+        ctx.globalAlpha = 0.6;
+        ctx.fillText("CLICK OR SPACE TO RETRY", W / 2, H / 2 + 44);
+        ctx.globalAlpha = 1;
       }
 
       ctx.restore();
     }
 
-    applyTheme();
     requestAnimationFrame(loop);
   </script>
 </body>
