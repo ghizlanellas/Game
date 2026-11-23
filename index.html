@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ORBIT // Minimalist Reflex Game</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Reset & Base Styles */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #0d0f14;
+            color: #ffffff;
+            touch-action: manipulation;
+        }
+
+        /* Fullscreen Canvas */
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Minimalist HUD Layer */
+        #hud {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 24px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .hud-stat {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .hud-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            opacity: 0.55;
+            transition: color 0.5s ease;
+        }
+
+        .hud-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            transition: color 0.5s ease, transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .hud-right {
+            text-align: right;
+            align-items: flex-end;
+        }
+
+        /* Sound Toggle Button */
+        #sound-toggle {
+            pointer-events: auto;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            color: inherit;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            backdrop-filter: blur(8px);
+            transition: transform 0.2s ease, background 0.2s ease;
+        }
+
+        #sound-toggle:hover {
+            transform: scale(1.08);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        #sound-toggle:active {
+            transform: scale(0.95);
+        }
+
+        /* Center Overlay (Start / Game Over) */
+        #overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            text-align: center;
+            z-index: 20;
+            pointer-events: auto;
+            transition: opacity 0.35s ease, transform 0.35s ease;
+        }
+
+        #overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.96);
+        }
+
+        .glass-card {
+            background: rgba(15, 18, 25, 0.65);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            padding: 36px 44px;
+            border-radius: 28px;
+            max-width: 380px;
+            width: 100%;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+        }
+
+        .game-title {
+            font-size: 3rem;
+            font-weight: 700;
+            letter-spacing: 0.16em;
+            margin-right: -0.16em;
+            margin-bottom: 8px;
+        }
+
+        .game-subtitle {
+            font-size: 0.95rem;
+            opacity: 0.7;
+            line-height: 1.5;
+            margin-bottom: 28px;
+        }
+
+        .stats-row {
+            display: flex;
+            justify-content: center;
+            gap: 32px;
+            margin-bottom: 28px;
+            padding: 16px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .stats-row.hidden {
+            display: none;
+        }
+
+        .stat-box {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .stat-box span:first-child {
+            font-size: 0.7rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            opacity: 0.6;
+        }
+
+        .stat-box span:last-child {
+            font-size: 1.75rem;
+            font-weight: 700;
+        }
+
+        .play-btn {
+            width: 100%;
+            padding: 16px 28px;
+            font-family: inherit;
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            border: none;
+            border-radius: 16px;
+            cursor: pointer;
+            background: #ffffff;
+            color: #0d0f14;
+            box-shadow: 0 8px 24px rgba(255, 255, 255, 0.2);
+            transition: transform 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.18s ease;
+        }
+
+        .play-btn:hover {
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 12px 30px rgba(255, 255, 255, 0.3);
+        }
+
+        .play-btn:active {
+            transform: translateY(1px) scale(0.98);
+        }
+
+        .hint-key {
+            display: inline-block;
+            margin-top: 18px;
+            font-size: 0.78rem;
+            letter-spacing: 0.08em;
+            opacity: 0.55;
+        }
+
+        kbd {
+            display: inline-block;
+            padding: 2px 8px;
+            font-family: inherit;
+            font-size: 0.75rem;
+            font-weight: 600;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            margin: 0 2px;
+        }
+
+        @media (max-width: 480px) {
+            #hud {
+                padding: 18px 20px;
+            }
+            .glass-card {
+                padding: 28px 24px;
+            }
+            .game-title {
+                font-size: 2.4rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Minimalist Top HUD -->
+    <div id="hud">
+        <div class="hud-stat">
+            <span class="hud-label" id="best-label">Best</span>
+            <span class="hud-value" id="best-score">0</span>
+        </div>
+
+        <button id="sound-toggle" aria-label="Toggle Sound" title="Toggle Sound">
+            <!-- Speaker On Icon -->
+            <svg id="icon-sound-on" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+            </svg>
+            <!-- Speaker Off Icon -->
+            <svg id="icon-sound-off" style="display:none;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <line x1="23" y1="9" x2="17" y2="15"></line>
+                <line x1="17" y1="9" x2="23" y2="15"></line>
+            </svg>
+        </button>
+
+        <div class="hud-stat hud-right">
+            <span class="hud-label" id="streak-label">Streak</span>
+            <span class="hud-value" id="streak-value">x1</span>
+        </div>
+    </div>
+
+    <!-- Start / Game Over Overlay -->
+    <div id="overlay">
+        <div class="glass-card" id="overlay-card">
+            <h1 class="game-title" id="overlay-title">ORBIT</h1>
+            <p class="game-subtitle" id="overlay-subtitle">Tap when the glowing dot passes inside the highlighted arc.</p>
+
+            <div class="stats-row hidden" id="gameover-stats">
+                <div class="stat-box">
+                    <span>Score</span>
+                    <span id="final-score">0</span>
+                </div>
+                <div class="stat-box">
+                    <span>Best</span>
+                    <span id="final-best">0</span>
+                </div>
+            </div>
+
+            <button class="play-btn" id="start-btn">Start Orbit</button>
+            <div class="hint-key">Press <kbd>SPACE</kbd> or tap anywhere</div>
+        </div>
+    </div>
+
+    <!-- Interactive Game Canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        /**
+         * ORBIT — Minimalist One-Button Reflex & Rhythm Game
+         * Pure HTML5 Canvas + Web Audio API Synthesizer (Zero external assets)
+         */
+
+        // ==========================================
+        // 1. CURATED HIGH-CONTRAST COLOR PALETTES
+        // ==========================================
+        const PALETTES = [
+            {
+                name: 'Midnight Neon',
+                bg: [13, 15, 22],
+                ring: [42, 48, 68],
+                target: [0, 245, 212],
+                dot: [255, 255, 255],
+                text: '#ffffff'
+            },
+            {
+                name: 'Solar Flare',
+                bg: [22, 13, 24],
+                ring: [66, 36, 62],
+                target: [255, 94, 126],
+                dot: [255, 226, 112],
+                text: '#ffffff'
+            },
+            {
+                name: 'Cyber Lime',
+                bg: [12, 22, 18],
+                ring: [34, 62, 50],
+                target: [181, 255, 59],
+                dot: [255, 255, 255],
+                text: '#ffffff'
+            },
+            {
+                name: 'Electric Cobalt',
+                bg: [10, 17, 36],
+                ring: [30, 52, 98],
+                target: [56, 182, 255],
+                dot: [255, 214, 10],
+                text: '#ffffff'
+            },
+            {
+                name: 'Velvet Tangerine',
+                bg: [24, 16, 14],
+                ring: [68, 45, 38],
+                target: [255, 138, 61],
+                dot: [255, 248, 231],
+                text: '#ffffff'
+            },
+            {
+                name: 'Nordic Daylight',
+                bg: [242, 244, 248],
+                ring: [206, 213, 225],
+                target: [255, 61, 113],
+                dot: [18, 22, 33],
+                text: '#121621'
+            },
+            {
+                name: 'Ultraviolet',
+                bg: [18, 12, 32],
+                ring: [54, 36, 92],
+                target: [199, 125, 255],
+                dot: [114, 239, 221],
+                text: '#ffffff'
+            },
+            {
+                name: 'Matcha Cream',
+                bg: [238, 242, 230],
+                ring: [198, 209, 184],
+                target: [28, 156, 108],
+                dot: [24, 34, 28],
+                text: '#18221c'
+            }
+        ];
+
+        // ==========================================
+        // 2. WEB AUDIO API PROCEDURAL SYNTHESIZER
+        // ==========================================
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+                // Pentatonic scale frequencies (C5 major pentatonic + octave) for pleasant musical hits
+                this.notes = [523.25, 587.33, 659.25, 783.99, 880.00, 1046.50, 1174.66, 1318.51];
+                this.noteIndex = 0;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContext) {
+                        this.ctx = new AudioContext();
+                    }
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            toggleMute() {
+                this.muted = !this.muted;
+                return this.muted;
+            }
+
+            playHit(streak = 1) {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                const baseFreq = this.notes[this.noteIndex % this.notes.length];
+                this.noteIndex++;
+
+                // Primary bell-like sine chime
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(baseFreq, now);
+                osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.01, now + 0.25);
+
+                gain.gain.setValueAtTime(0.001, now);
+                gain.gain.linearRampToValueAtTime(0.22, now + 0.015);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.36);
+
+                // Subtle harmonic overtone for "Perfect" / high streak hits
+                if (streak > 1) {
+                    const subOsc = this.ctx.createOscillator();
+                    const subGain = this.ctx.createGain();
+                    subOsc.type = 'triangle';
+                    subOsc.frequency.setValueAtTime(baseFreq * 1.5, now);
+
+                    subGain.gain.setValueAtTime(0.001, now);
+                    subGain.gain.linearRampToValueAtTime(0.08, now + 0.01);
+                    subGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+
+                    subOsc.connect(subGain);
+                    subGain.connect(this.ctx.destination);
+                    subOsc.start(now);
+                    subOsc.stop(now + 0.24);
+                }
+            }
+
+            playMiss() {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+
+                const now = this.ctx.currentTime;
+                this.noteIndex = 0;
+
+                // Low descending thud
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(160, now);
+                osc.frequency.exponentialRampToValueAtTime(48, now + 0.32);
+
+                // Lowpass filter to keep it warm and sleek rather than harsh
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(420, now);
+
+                gain.gain.setValueAtTime(0.24, now);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+
+                osc.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.36);
+            }
+        }
+
+        // ==========================================
+        // 3. CANVAS & GAME STATE SETUP
+        // ==========================================
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const sound = new SoundEngine();
+
+        // DOM Elements
+        const overlay = document.getElementById('overlay');
+        const overlayCard = document.getElementById('overlay-card');
+        const overlayTitle = document.getElementById('overlay-title');
+        const overlaySubtitle = document.getElementById('overlay-subtitle');
+        const gameoverStats = document.getElementById('gameover-stats');
+        const finalScoreEl = document.getElementById('final-score');
+        const finalBestEl = document.getElementById('final-best');
+        const startBtn = document.getElementById('start-btn');
+        const bestScoreEl = document.getElementById('best-score');
+        const streakValueEl = document.getElementById('streak-value');
+        const soundToggleBtn = document.getElementById('sound-toggle');
+        const iconSoundOn = document.getElementById('icon-sound-on');
+        const iconSoundOff = document.getElementById('icon-sound-off');
+
+        // Persistent High Score
+        const STORAGE_KEY = 'orbit_minimal_highscore_v1';
+        let highScore = parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10);
+        bestScoreEl.textContent = highScore;
+
+        // Game State
+        const STATE = {
+            MENU: 'MENU',
+            PLAYING: 'PLAYING',
+            GAMEOVER: 'GAMEOVER'
+        };
+
+        let gameState = STATE.MENU;
+        let score = 0;
+        let streak = 0;
+
+        // Geometry & Motion
+        let width = window.innerWidth;
+        let height = window.innerHeight;
+        let centerX = width / 2;
+        let centerY = height / 2;
+        let orbitRadius = 120;
+
+        // Orbiting Dot & Target Arc
+        let dotAngle = -Math.PI / 2;
+        let angularSpeed = 2.3; // radians per second
+        let direction = 1; // 1 = clockwise, -1 = counter-clockwise
+        let targetAngle = Math.PI / 2;
+        let targetArcSize = 0.78; // radians (~45 deg initially)
+        let targetPulse = 0;
+
+        // Visual Juice: Trail, Particles, Ripples, Shake, Floating Text
+        let trail = [];
+        let particles = [];
+        let ripples = [];
+        let floatingTexts = [];
+        let shakeTime = 0;
+        let shakeIntensity = 0;
+
+        // Smooth Palette Interpolation
+        let paletteIndex = 0;
+        let currentColors = {
+            bg: [...PALETTES[0].bg],
+            ring: [...PALETTES[0].ring],
+            target: [...PALETTES[0].target],
+            dot: [...PALETTES[0].dot]
+        };
+
+        // ==========================================
+        // 4. RESPONSIVE RESIZING
+        // ==========================================
+        function resizeCanvas() {
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            width = window.innerWidth;
+            height = window.innerHeight;
+
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            centerX = width / 2;
+            centerY = height / 2;
+            const minDim = Math.min(width, height);
+            orbitRadius = Math.max(92, Math.min(185, minDim * 0.28));
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // ==========================================
+        // 5. HELPER MATH & COLOR FUNCTIONS
+        // ==========================================
+        function normalizeAngle(a) {
+            return Math.atan2(Math.sin(a), Math.cos(a));
+        }
+
+        function angleDifference(a, b) {
+            return Math.abs(normalizeAngle(a - b));
+        }
+
+        function lerp(start, end, factor) {
+            return start + (end - start) * factor;
+        }
+
+        function rgbString(arr, alpha = 1) {
+            return `rgba(${Math.round(arr[0])}, ${Math.round(arr[1])}, ${Math.round(arr[2])}, ${alpha})`;
+        }
+
+        function triggerShake(intensity, duration = 0.22) {
+            shakeIntensity = intensity;
+            shakeTime = duration;
+        }
+
+        // ==========================================
+        // 6. GAMEPLAY MECHANICS
+        // ==========================================
+        function spawnNewTarget() {
+            // Place the next target at least 95 degrees away so the player always has fair reaction time
+            const minOffset = Math.PI * 0.55;
+            const maxOffset = Math.PI * 1.45;
+            const randomOffset = minOffset + Math.random() * (maxOffset - minOffset);
+
+            // Spawn ahead in the new direction of travel
+            targetAngle = normalizeAngle(dotAngle + direction * randomOffset);
+
+            // Gradually narrow the target arc as score climbs (clamped to a fair minimum)
+            const shrinkFactor = Math.min(score * 0.014, 0.42);
+            targetArcSize = Math.max(0.36, 0.82 - shrinkFactor);
+            targetPulse = 1;
+        }
+
+        function startGame() {
+            sound.init();
+            score = 0;
+            streak = 0;
+            direction = 1;
+            angularSpeed = 2.35;
+            dotAngle = -Math.PI / 2;
+            targetAngle = Math.PI / 2;
+            targetArcSize = 0.82;
+            trail = [];
+            particles = [];
+            ripples = [];
+            floatingTexts = [];
+
+            updateHUD();
+            gameState = STATE.PLAYING;
+            overlay.classList.add('hidden');
+        }
+
+        function handlePlayerAction() {
+            if (gameState !== STATE.PLAYING) return;
+
+            const diff = angleDifference(dotAngle, targetAngle);
+            // Generous forgiveness buffer equal to the visual radius of the dot
+            const dotAngularRadius = 11 / orbitRadius;
+            const hitThreshold = (targetArcSize / 2) + dotAngularRadius;
+
+            if (diff <= hitThreshold) {
+                // --- SUCCESSFUL HIT ---
+                const isPerfect = diff <= targetArcSize * 0.22;
+                streak++;
+                const pointsEarned = isPerfect ? 2 : 1;
+                score += pointsEarned;
+
+                if (score > highScore) {
+                    highScore = score;
+                    localStorage.setItem(STORAGE_KEY, highScore.toString());
+                }
+
+                // Reverse orbit direction & progressively increase angular velocity
+                direction *= -1;
+                angularSpeed = Math.min(5.8, 2.35 + score * 0.075);
+
+                // Shift color palette every hit (or cycle smoothly through themes)
+                paletteIndex = (paletteIndex + 1) % PALETTES.length;
+                applyThemeTextColors();
+
+                // Audio & Tactile Feedback
+                sound.playHit(isPerfect ? streak + 1 : streak);
+                triggerShake(isPerfect ? 7 : 4, 0.16);
+
+                // Spawn Particles & Shockwave at Dot Position
+                const dotX = centerX + Math.cos(dotAngle) * orbitRadius;
+                const dotY = centerY + Math.sin(dotAngle) * orbitRadius;
+                spawnBurst(dotX, dotY, currentColors.target, isPerfect ? 24 : 15);
+
+                ripples.push({
+                    x: centerX,
+                    y: centerY,
+                    radius: orbitRadius,
+                    alpha: 0.65,
+                    color: [...currentColors.target]
+                });
+
+                floatingTexts.push({
+                    x: dotX,
+                    y: dotY - 18,
+                    text: isPerfect ? 'PERFECT +2' : '+1',
+                    alpha: 1,
+                    vy: -42,
+                    color: rgbString(currentColors.target)
+                });
+
+                spawnNewTarget();
+                updateHUD(true);
+            } else {
+                // --- MISSED TARGET ---
+                triggerGameOver();
+            }
+        }
+
+        function triggerGameOver() {
+            gameState = STATE.GAMEOVER;
+            sound.playMiss();
+            triggerShake(14, 0.35);
+
+            const dotX = centerX + Math.cos(dotAngle) * orbitRadius;
+            const dotY = centerY + Math.sin(dotAngle) * orbitRadius;
+            spawnBurst(dotX, dotY, [255, 75, 95], 28);
+
+            // Update Overlay UI
+            overlayTitle.textContent = 'MISSED';
+            overlaySubtitle.textContent = 'Stay locked into the rhythm and tap inside the arc.';
+            gameoverStats.classList.remove('hidden');
+            finalScoreEl.textContent = score;
+            finalBestEl.textContent = highScore;
+            startBtn.textContent = 'Play Again';
+
+            setTimeout(() => {
+                overlay.classList.remove('hidden');
+            }, 320);
+        }
+
+        function updateHUD(pop = false) {
+            bestScoreEl.textContent = highScore;
+            streakValueEl.textContent = `x${Math.max(1, streak)}`;
+
+            if (pop) {
+                streakValueEl.style.transform = 'scale(1.25)';
+                setTimeout(() => {
+                    streakValueEl.style.transform = 'scale(1)';
+                }, 140);
+            }
+        }
+
+        function applyThemeTextColors() {
+            const theme = PALETTES[paletteIndex];
+            document.body.style.color = theme.text;
+            const isLight = theme.bg[0] > 180;
+
+            overlayCard.style.background = isLight
+                ? 'rgba(255, 255, 255, 0.78)'
+                : 'rgba(15, 18, 25, 0.68)';
+            overlayCard.style.borderColor = isLight
+                ? 'rgba(0, 0, 0, 0.08)'
+                : 'rgba(255, 255, 255, 0.12)';
+            startBtn.style.background = isLight ? '#121621' : '#ffffff';
+            startBtn.style.color = isLight ? '#ffffff' : '#0d0f14';
+        }
+
+        function spawnBurst(x, y, rgb, count) {
+            for (let i = 0; i < count; i++) {
+                const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4;
+                const speed = 70 + Math.random() * 210;
+                particles.push({
+                    x,
+                    y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    size: 2.5 + Math.random() * 3.5,
+                    alpha: 1,
+                    decay: 1.6 + Math.random() * 1.1,
+                    color: [...rgb]
+                });
+            }
+        }
+
+        // ==========================================
+        // 7. INPUT LISTENERS (SPACEBAR, CLICK, TOUCH)
+        // ==========================================
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.key === ' ') {
+                e.preventDefault();
+                if (e.repeat) return;
+
+                if (gameState === STATE.PLAYING) {
+                    handlePlayerAction();
+                } else if (!overlay.classList.contains('hidden')) {
+                    startGame();
+                }
+            }
+        });
+
+        canvas.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            if (gameState === STATE.PLAYING) {
+                handlePlayerAction();
+            }
+        });
+
+        startBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            startGame();
+        });
+
+        soundToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isMuted = sound.toggleMute();
+            iconSoundOn.style.display = isMuted ? 'none' : 'block';
+            iconSoundOff.style.display = isMuted ? 'block' : 'none';
+        });
+
+        // ==========================================
+        // 8. MAIN UPDATE & RENDER LOOP
+        // ==========================================
+        let lastTime = performance.now();
+
+        function update(dt) {
+            // Smoothly interpolate color palette toward target theme
+            const targetTheme = PALETTES[paletteIndex];
+            const colorLerp = Math.min(1, dt * 6.5);
+            for (let i = 0; i < 3; i++) {
+                currentColors.bg[i] = lerp(currentColors.bg[i], targetTheme.bg[i], colorLerp);
+                currentColors.ring[i] = lerp(currentColors.ring[i], targetTheme.ring[i], colorLerp);
+                currentColors.target[i] = lerp(currentColors.target[i], targetTheme.target[i], colorLerp);
+                currentColors.dot[i] = lerp(currentColors.dot[i], targetTheme.dot[i], colorLerp);
+            }
+
+            // Update Orbit Rotation
+            const activeSpeed = gameState === STATE.PLAYING ? angularSpeed : 1.1;
+            dotAngle = normalizeAngle(dotAngle + direction * activeSpeed * dt);
+
+            // Record Dot Motion Trail
+            const dotX = centerX + Math.cos(dotAngle) * orbitRadius;
+            const dotY = centerY + Math.sin(dotAngle) * orbitRadius;
+            trail.push({ x: dotX, y: dotY, alpha: 0.55 });
+            if (trail.length > 18) {
+                trail.shift();
+            }
+            for (let t of trail) {
+                t.alpha *= 0.91;
+            }
+
+            // Target pulse decay
+            if (targetPulse > 0) {
+                targetPulse = Math.max(0, targetPulse - dt * 3.5);
+            }
+
+            // Update Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.vx *= 0.94;
+                p.vy *= 0.94;
+                p.alpha -= p.decay * dt;
+                if (p.alpha <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+
+            // Update Shockwave Ripples
+            for (let i = ripples.length - 1; i >= 0; i--) {
+                const r = ripples[i];
+                r.radius += 140 * dt;
+                r.alpha -= 1.6 * dt;
+                if (r.alpha <= 0) {
+                    ripples.splice(i, 1);
+                }
+            }
+
+            // Update Floating Score Popups
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                const ft = floatingTexts[i];
+                ft.y += ft.vy * dt;
+                ft.alpha -= 1.4 * dt;
+                if (ft.alpha <= 0) {
+                    floatingTexts.splice(i, 1);
+                }
+            }
+
+            // Update Screen Shake
+            if (shakeTime > 0) {
+                shakeTime = Math.max(0, shakeTime - dt);
+            }
+        }
+
+        function draw() {
+            // Fill Background
+            ctx.fillStyle = rgbString(currentColors.bg);
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.save();
+
+            // Apply Screen Shake Offset
+            if (shakeTime > 0) {
+                const dx = (Math.random() - 0.5) * 2 * shakeIntensity;
+                const dy = (Math.random() - 0.5) * 2 * shakeIntensity;
+                ctx.translate(dx, dy);
+            }
+
+            // 1. Subtle Ambient Radial Glow Behind Ring
+            const radialGrad = ctx.createRadialGradient(
+                centerX, centerY, orbitRadius * 0.2,
+                centerX, centerY, orbitRadius * 1.45
+            );
+            radialGrad.addColorStop(0, rgbString(currentColors.target, 0.08));
+            radialGrad.addColorStop(1, rgbString(currentColors.bg, 0));
+            ctx.fillStyle = radialGrad;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, orbitRadius * 1.45, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 2. Shockwave Ripples
+            for (const r of ripples) {
+                ctx.strokeStyle = rgbString(r.color, r.alpha);
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            // 3. Base Orbit Track Circle
+            ctx.strokeStyle = rgbString(currentColors.ring, 1);
+            ctx.lineWidth = 14;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, orbitRadius, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // 4. Highlighted Target Arc Zone
+            const startArc = targetAngle - targetArcSize / 2;
+            const endArc = targetAngle + targetArcSize / 2;
+
+            ctx.save();
+            ctx.strokeStyle = rgbString(currentColors.target, 1);
+            ctx.lineWidth = 16 + targetPulse * 6;
+            ctx.lineCap = 'round';
+            ctx.shadowColor = rgbString(currentColors.target, 0.75);
+            ctx.shadowBlur = 22;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, orbitRadius, startArc, endArc);
+            ctx.stroke();
+            ctx.restore();
+
+            // 5. Center Score Display inside the Ring
+            if (gameState === STATE.PLAYING) {
+                ctx.save();
+                ctx.fillStyle = PALETTES[paletteIndex].text;
+                ctx.globalAlpha = 0.9;
+                ctx.font = `700 ${Math.round(orbitRadius * 0.48)}px 'Space Grotesk', sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(score.toString(), centerX, centerY + 2);
+                ctx.restore();
+            }
+
+            // 6. Orbiting Dot Trail
+            for (let i = 0; i < trail.length; i++) {
+                const t = trail[i];
+                const ratio = i / trail.length;
+                ctx.fillStyle = rgbString(currentColors.dot, t.alpha * 0.45);
+                ctx.beginPath();
+                ctx.arc(t.x, t.y, 10 * ratio, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // 7. Glowing Orbiting Dot
+            const dotX = centerX + Math.cos(dotAngle) * orbitRadius;
+            const dotY = centerY + Math.sin(dotAngle) * orbitRadius;
+
+            ctx.save();
+            ctx.fillStyle = rgbString(currentColors.dot, 1);
+            ctx.shadowColor = rgbString(currentColors.dot, 0.85);
+            ctx.shadowBlur = 18;
+            ctx.beginPath();
+            ctx.arc(dotX, dotY, 11, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+
+            // 8. Burst Particles
+            for (const p of particles) {
+                ctx.fillStyle = rgbString(p.color, p.alpha);
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // 9. Floating Score Popups
+            for (const ft of floatingTexts) {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, ft.alpha);
+                ctx.fillStyle = ft.color;
+                ctx.font = "700 14px 'Space Grotesk', sans-serif";
+                ctx.textAlign = 'center';
+                ctx.fillText(ft.text, ft.x, ft.y);
+                ctx.restore();
+            }
+
+            ctx.restore();
+        }
+
+        function loop(now) {
+            const dt = Math.min(0.05, (now - lastTime) / 1000);
+            lastTime = now;
+
+            update(dt);
+            draw();
+
+            requestAnimationFrame(loop);
+        }
+
+        // Start animation loop on load
+        window.onload = function () {
+            applyThemeTextColors();
+            lastTime = performance.now();
+            requestAnimationFrame(loop);
+        };
+    </script>
+</body>
+</html>
